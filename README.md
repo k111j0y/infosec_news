@@ -6,3 +6,7 @@ This project deploys configparser, tqdm, json, urllib3, requests, os, bs4, pprin
 This makes use of an already curated blog list @ https://threatable.io (huge props to the people organizing that!).
 
 More to come!
+
+
+# Project Notes
+snscrape or twitter have a 41 parameter limit for "or" statements. So, you need to grab <i>all<i/> the tweets from your users. Regex seemed to be the easiest method to parse with. 
