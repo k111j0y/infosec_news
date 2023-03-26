@@ -14,3 +14,4 @@ snscrape or twitter have a 41 parameter limit for "or" statements. So, you need 
 # Noteworthy Items
 As it stands, you have to hard code users and keywords into the program.  This is easily changed, but left as an exercise to the user if they chose.  (Just use the input() function).
 In this script the newsDB has been overridden and output just comes to the screen.  I'm currently working on the best way to store and present data.
+For Masto: filtration coming soon.
