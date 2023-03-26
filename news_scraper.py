@@ -158,6 +158,7 @@ def get_threatable_blog_posts():
     thtAbleBodySectionFilter = allTextOnPage.find_all('tbody')
     thtAbleBlogsSectFilter = thtAbleBodySectionFilter[0]
     threatableIndividualBlogPost = thtAbleBlogsSectFilter.find_all('tr')
+    regex_for_blog_url = r'(?i)https?:\/\/(.*?)\/'
     for blog in threatableIndividualBlogPost:
         current_time_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         story_name = str(blog.a.text.replace('\r\n','').replace('\"','\'').strip('^ ').strip(' $'))
@@ -166,7 +167,7 @@ def get_threatable_blog_posts():
         if story_name.count("|") >= 1:
             story_author = str(story_name.split("|")[1].strip(" by "))
         else:
-            continue
+            story_author = str(re.findall(regex_for_blog_url, story_href)[0])
         formatted_addition = rf'{{"user":"{story_author}", "content": "{story_name}", "content_id": "", "date": "{current_time_string}", "hashtags": "{story_href}"}}'
         # string_add = str(formatted_addition)
         # mydict = ast.literal_eval(string_add)
