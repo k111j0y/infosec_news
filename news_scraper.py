@@ -2,7 +2,10 @@
 ################################################################################
 ##   News Feed Presenter
 ################################################################################
-import configparser, tqdm, json, urllib3, requests, os, bs4, pprint, ast 
+## https://towardsdatascience.com/an-extensive-guide-to-collecting-tweets-from-twitter-api-v2-for-academic-research-using-python-3-518fcb71df2a
+## https://www.threatable.io/
+
+import configparser, tqdm, json, urllib3, requests, os, bs4, pprint, ast , re, html2text
 
 import pandas as pd
 import snscrape.modules.twitter as sntwitter
@@ -17,21 +20,89 @@ from pysondb import db
 ## Global Vars
 ################################################################################
 ## Define DB source:
-news_db = db.getDb("<fix your path here>")
+news_db = db.getDb("<PATH HERE>")
+
+
 
 # keyword_list to search for
-keyword_list = ['macOS','osx','ios','system32','dcom','PEBear','win32','exploit','stealer','exchange','AADInternals', 'elf','root','python','wireshark','powershell','.net','dotnet','dot net', 'amsi', 'mfa','pth','rce','cve','reversing','yara','suricata','sigma','sentinelone','crowdstrike','carbonblack','logscale','lucene','lpe','artifact','tampering','xss','persistent','persistence','kernel','low conf','med conf','medium conf','high conf','bypass','shellcode', 'github','git','c3','c2']
+keyword_list = ['']
 
 # List of Twitter twit names to scrape
-twitter_users = ['vxunderground','gabby_roncone','johnholtquist','wdormann','thehackernews','inversecos','olafhartong','lorenzofb','thedfirreport','kostastsale','esetresearchgroup','sans_isc','patrickwardle','TheRecord_media','citizenlab','ransomwarenews','pr0xylife' ,'0xdf_', 'malware_traffic']
+twitter_users = ['']
 
 # Calculate the date and time 24 hours ago
 since_date = datetime.today() - timedelta(days=1)
 
+
+# Twitter golbals
 lst_of_tweets = []
 filtered_list_of_tweets = []
 regex_for_keywords = ''
 
+# Masto Globals
+instance_url = 'https://mastodon.social'
+
+mastodon_users_list = [
+    ''
+]
+
+################################################################################
+## MASTODON 
+################################################################################
+def masto_user_id_lookup(acct):
+    URL = f'https://mastodon.social/api/v1/accounts/lookup'
+    params = {
+        'acct': acct
+    }
+    mast_api_req = requests.get(URL, params=params)
+    masto_user = json.loads(mast_api_req.text)
+    return masto_user
+
+
+def scrape_toots(masto_user):
+    try:
+        masto_user = masto_user_id_lookup(acct=f'{masto_user}') 
+        mast_user_id = masto_user['id']
+        mastodon_api_endpoint = f'{instance_url}/api/v1/accounts/{mast_user_id}/statuses'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Accept': 'application/json'
+        }
+        params = {
+            'only_media': 'false',
+            'exclude_replies': 'true',
+            'exclude_reblogs': 'true',
+            'limit': '30'
+        }
+        req_user_toots = requests.get(mastodon_api_endpoint, params=params, headers=headers)
+        user_toots = req_user_toots.json()
+        filtered_list_of_toots = []
+        for toot in user_toots:
+            if toot['created_at'][:16] > since_date.strftime("%Y-%m-%dT%H:%M:%S%f")[0:16]:
+                user_name = toot['account']['username']
+                toot_id = toot['id']
+                toot_content = str(html2text.html2text(toot['content'])).replace('\n',' ').strip('“').replace("’","'").strip('”')
+                toot_time = toot['created_at']
+                toot_tags = toot['tags']
+                formatted_toot_information = rf'{{"user":"{user_name}", "content": "{toot_content}", "content_id": "{toot_id}", "date": "{toot_time}", "hashtags": "{toot_tags}"}}'
+                filtered_list_of_toots.append(formatted_toot_information)
+                #return filtered_list_of_toots
+                #string_add = str(formatted_toot_information)
+                #print(string_add)
+                #user_toots_dict = ast.literal_eval(string_add)
+                #news_db.add(user_toots_dict)
+                print(filtered_list_of_toots)
+    except SyntaxError:
+        print("Syntax Error Found")
+        pass
+    except Exception as e:
+        print("NON Syntax Error Found")
+        pass
+
+
+def toots_loop():
+    for masto_user in mastodon_users_list:
+        scrape_toots(masto_user)
 
 
 ################################################################################
@@ -47,7 +118,8 @@ def filter_tweets():
             tweet.date.strftime("%Y-%m-%d  %H:%M:%S"),
             tweet.rawContent,
             tweet.user.username,
-            tweet.hashtags
+            tweet.hashtags,
+            tweet.id
             ]
             lst_of_tweets.append(data_i_want)
             if i > 30:
@@ -64,16 +136,16 @@ def filter_tweets():
         else:
             filtered_list_of_tweets.append(tweet)
     tweets_df = pd.DataFrame(
-        filtered_list_of_tweets, columns=['Date','Tweet','User','Hashtags']
+        filtered_list_of_tweets, columns=['Date','Tweet','User','Hashtags','ID']
     )
     for index, row in tweets_df.iterrows():
         print(f'''%%%%%%%%%%%%%%% {row[2]} %%%%%%%%%%%%%%%
 Date: {row[0]}
 Content: {row[1]}
-
+Hashtags: {row[3]}
+ID: {row[4]}
 
 ''')
-
 
 
 ################################################################################
@@ -87,19 +159,31 @@ def get_threatable_blog_posts():
     thtAbleBlogsSectFilter = thtAbleBodySectionFilter[0]
     threatableIndividualBlogPost = thtAbleBlogsSectFilter.find_all('tr')
     for blog in threatableIndividualBlogPost:
-        current_time_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")
+        current_time_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         story_name = str(blog.a.text.replace('\r\n','').replace('\"','\'').strip('^ ').strip(' $'))
         story_href = blog.a.get('href')
-        formatted_addition = rf'{{"name": "{story_name}","link": "{story_href}","firstish_seen": "{current_time_string}"}}'
-        string_add = str(formatted_addition)
-        mydict = ast.literal_eval(string_add)
-        news_db.add(mydict)
-
+        story_author = ''
+        if story_name.count("|") >= 1:
+            story_author = str(story_name.split("|")[1].strip(" by "))
+        else:
+            continue
+        formatted_addition = rf'{{"user":"{story_author}", "content": "{story_name}", "content_id": "", "date": "{current_time_string}", "hashtags": "{story_href}"}}'
+        # string_add = str(formatted_addition)
+        # mydict = ast.literal_eval(string_add)
+        # news_db.add(mydict)
+        print(formatted_addition)
 
 
 ################################################################################
-## CONDITIONAL BLOCK / NAMING
+## CLOSING // RUN IT
 ################################################################################
 if __name__ == "__main__":
     get_threatable_blog_posts()
     filter_tweets()
+    toots_loop()
+
+
+
+
+
+
